@@ -1,55 +1,54 @@
-# Audio Analyzer
+Audio Analyzer
 
-## Analysetool von Audiodateien mit Fokus auf zeitabhängige Terzband-Impulsantworten zur besseren Diagnose von Flatterechos.
+Audio file analysis tool with a focus on time-dependent third-octave-band impulse responses for improved diagnosis of flutter echoes.
 
-Das tool dient der bestimmung von Flatterechos aus Audioaufzeichnungen. Für die eingelesene Audiodatei können trezband-Impulsantworten (Audio/Zeitverlauf) erstellt werden. Mithilfe deiser kann einfach die Terzbänder des Flatterechos bestimmt werden. Die Terzbandimpulsantowrten können als wav exportiert werden.
+The tool is designed to detect flutter echoes from audio recordings. For an imported audio file, third-octave-band impulse responses can be generated. These allow straightforward identification of the third-octave bands in which flutter echoes occur. The third-octave-band impulse responses can be listend back to or exported as WAV files.
 
-<img width="999" height="743" alt="Image" src="https://github.com/user-attachments/assets/e2f0a35a-0750-4206-9c23-de9f23bf8c5e" />
+<img width="994" height="736" alt="Image" src="https://github.com/user-attachments/assets/2335b1ac-ab21-4697-87bb-a3e05fa803fb" />
 
-<img width="1000" height="741" alt="Image" src="https://github.com/user-attachments/assets/e66e3d35-606f-4dd1-9163-94859dd421e3" />
+<img width="999" height="738" alt="Image" src="https://github.com/user-attachments/assets/94a48b2e-38ba-4bc7-b449-a2bd680be28e" />
 
-<img width="998" height="746" alt="Image" src="https://github.com/user-attachments/assets/1fbc9a4b-2dd3-45ca-bbf0-31ce16de6fce" />
+<img width="996" height="736" alt="Image" src="https://github.com/user-attachments/assets/82eebb82-a4db-4030-ab79-07c1a3e71931" />
 
 ## Installation
 
-### Entwicklungsumgebung
+### Development Environment
 
 ```bash
-# Python 3.11+ erforderlich
+# Python 3.11+ required
 python -m venv venv
 source venv/bin/activate  # Linux/macOS
-# oder: venv\Scripts\activate  # Windows
+# or: venv\Scripts\activate  # Windows
 
 pip install -r requirements.txt
 ```
 
-### Windows-Executable erstellen
+Creating a Windows Executable
 
 ```bash
 pyinstaller audio_analyzer.spec
-# Ergebnis in dist/AudioAnalyzer.exe
+# Output in dist/AudioAnalyzer.exe
 ```
 
-## Technische Dokumentation
+Technical Documentation
 
-### Terzbandfilterbank (IEC 61260)
+Third-Octave Filter Bank (IEC 61260)
 
-Die Filterbank verwendet **IIR Butterworth-Filter 6. Ordnung** mit:
-- Normgerechten Mittenfrequenzen nach IEC 61260-1
-- Bandbreite: fm × (2^(1/6) - 2^(-1/6))
-- Dokumentiertes Phasenverhalten und Gruppenlaufzeit
+The filter bank uses 6th-order IIR Butterworth filters with:
+	•	Standardized center frequencies according to IEC 61260-1
+	•	Bandwidth: fm × (2^(1/6) − 2^(−1/6))
+	•	Documented phase behavior and group delay
 
+Dependencies
+	•	Python 3.11+
+	•	PyQt6 (GUI)
+	•	numpy, scipy (signal processing)
+	•	pyqtgraph (visualization)
+	•	soundfile (WAV I/O)
+	•	librosa / audioread (audio decoding)
+	•	sounddevice (playback)
 
-## Abhängigkeiten
-
-- Python 3.11+
-- PyQt6 (GUI)
-- numpy, scipy (Signalverarbeitung)
-- pyqtgraph (interaktive Visualisierung)
-- soundfile (WAV-I/O)
-- librosa/audioread (MP3-Dekodierung)
-- sounddevice (Wiedergabe)
-
-## Lizenz
+License
 
 MIT License
+
