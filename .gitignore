@@ -1,3 +1,11 @@
 /.venv
 
 audio_analyzer/__pycache__
+/Literatur
+audio_analyzer/core/__pycache__
+audio_analyzer/core/gui/__pycache__
+audio_analyzer/core/utils/__pycache__
+audio_analyzer/__pycache__
+
+
+
