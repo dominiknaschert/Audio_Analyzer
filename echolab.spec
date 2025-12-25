@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec file for Audio Analyzer
+PyInstaller spec file for Echolab
 
 Build with:
-    pyinstaller audio_analyzer.spec
+    pyinstaller echolab.spec
 
-Result in: dist/AudioAnalyzer/AudioAnalyzer.exe
+Result in: dist/echolab/echolab.exe
 """
 
 import sys
@@ -61,7 +61,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='AudioAnalyzer',
+    name='echolab',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -83,6 +83,6 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='AudioAnalyzer',
+    name='echolab',
 )
 

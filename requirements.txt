@@ -1,4 +1,4 @@
-# Audio Analyzer - Dependencies
+# Echolab - Dependencies
 # Python 3.11+ required
 
 # GUI Framework

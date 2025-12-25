@@ -1,4 +1,4 @@
-Audio Analyzer
+Echolab
 
 Audio file analysis tool with a focus on time-dependent third-octave-band impulse responses for improved diagnosis of flutter echoes.
 
@@ -26,8 +26,8 @@ pip install -r requirements.txt
 Creating a Windows Executable
 
 ```bash
-pyinstaller audio_analyzer.spec
-# Output in dist/AudioAnalyzer.exe
+pyinstaller echolab.spec
+# Output in dist/echolab/echolab.exe
 ```
 
 Technical Documentation

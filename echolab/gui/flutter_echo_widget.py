@@ -69,7 +69,8 @@ class AnalysisPipelineDialog(QDialog):
             
             # Regressions - use actual values
             if result.p_decay is not None:
-                t_plot_start = t_start_used
+                # Use regression marker positions if available, otherwise use analysis start
+                t_plot_start = getattr(result, 't_regression_start', t_start_used)
                 t_plot_end = result.t_intersect + 0.1
                 t_plot = np.linspace(t_plot_start, t_plot_end, 100)
                 l_plot = np.polyval(result.p_decay, t_plot)
@@ -150,9 +151,9 @@ class RT60DetailDialog(QDialog):
         
         layout = QVBoxLayout(self)
         
-        # Info Label
-        info_label = QLabel(f"Extrapolated Reverberation Time RT60: {result.rt60_s:.2f} s")
-        info_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #a6e3a1; margin-bottom: 5px;")
+        # Info Label - RT60 in gray at the top
+        info_label = QLabel(f"RT60: {result.rt60_s:.2f} s")
+        info_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #6c7086; margin-bottom: 5px;")
         layout.addWidget(info_label)
         
         # Plot
@@ -166,9 +167,61 @@ class RT60DetailDialog(QDialog):
             # Level progression
             self.plot.plot(result.t, result.l_ir, pen=pg.mkPen('#89b4fa', width=1), name="Signal (Filtered)")
             
-            # Trend line
-            if result.l_trend is not None:
-                self.plot.plot(result.t, result.l_trend, pen=pg.mkPen('#fab387', width=2, style=Qt.DashLine), name="Trend / RT60 Fit")
+            # Calculate regression and level drop using the selected regression markers
+            actual_level_drop = None
+            if result.p_decay is not None:
+                # Use regression marker positions (user-selected start and end points)
+                t_regression_start = getattr(result, 't_regression_start', result.t_start_analysis)
+                t_regression_end = getattr(result, 't_regression_end', result.t_end_analysis)
+                
+                # Calculate level at regression start and end points
+                level_start = np.polyval(result.p_decay, t_regression_start)
+                level_end = np.polyval(result.p_decay, t_regression_end)
+                actual_level_drop = level_start - level_end  # Positive value = drop in dB
+                
+                # Draw regression line between selected start and end points
+                # Extend to intersection with noise floor for RT60 extrapolation
+                t_intersect = result.t_intersect
+                t_plot_start = t_regression_start
+                t_plot_end = min(t_intersect, result.t[-1])  # Don't extend beyond signal
+                
+                # Draw regression line from start marker to intersection
+                t_regression_plot = np.linspace(t_plot_start, t_plot_end, 100)
+                l_regression_plot = np.polyval(result.p_decay, t_regression_plot)
+                self.plot.plot(t_regression_plot, l_regression_plot, pen=pg.mkPen('#6c7086', width=2.5), name="RT60 Regression")
+                
+                # Draw vertical lines at regression start and end markers (gray)
+                start_line = pg.InfiniteLine(
+                    pos=t_regression_start, angle=90, movable=False,
+                    pen=pg.mkPen('#6c7086', width=1.5, style=Qt.DashLine)
+                )
+                self.plot.addItem(start_line)
+                
+                end_line = pg.InfiniteLine(
+                    pos=t_regression_end, angle=90, movable=False,
+                    pen=pg.mkPen('#6c7086', width=1.5, style=Qt.DashLine)
+                )
+                self.plot.addItem(end_line)
+                
+                # Draw line showing the actual level drop between regression markers (gray)
+                t_drop = np.array([t_regression_start, t_regression_end])
+                l_drop = np.array([level_start, level_end])
+                self.plot.plot(t_drop, l_drop, pen=pg.mkPen('#6c7086', width=2, style=Qt.DotLine), name="Level Drop")
+                
+                # Add annotation showing the level drop value (gray)
+                # Position it at the top of the plot
+                mid_t = (t_regression_start + t_regression_end) / 2
+                min_l = np.min(result.l_ir)
+                max_l = np.max(result.l_ir)
+                # Position at top of plot (near max level)
+                top_l = max_l - 2  # Slightly below max to avoid edge
+                drop_text = pg.TextItem(
+                    text=f"Δ = {actual_level_drop:.1f} dB",
+                    anchor=(0.5, 0.5),
+                    color='#6c7086'
+                )
+                drop_text.setPos(mid_t, top_l)
+                self.plot.addItem(drop_text)
             
             # Scale axes appropriately (level range)
             min_l = np.min(result.l_ir)
@@ -211,16 +264,34 @@ class RT60CorrectionDialog(QDialog):
         self._decay = decay_result
         self._accepted = False
         
-        # Excluded region (direct sound)
-        self._t_exclude = decay_result.t_start_fit  # Default: 0.2s
+        # Store regression parameters (will be calculated in _update_display)
+        self._regression_slope = None
+        self._regression_intercept = None
+        
+        # Excluded regions (start and end)
+        self._t_exclude_start = decay_result.t_start_fit  # Default: 0.2s, adjustable
+        self._t_exclude_end = decay_result.t[-1]  # Default: end of RIR (no exclusion), adjustable
         
         # Initial values from automatic calculation
+        # Regression markers must be within the non-excluded area (can touch exclusions)
         t_start = decay_result.t_start_fit
+        # Ensure start marker is >= start exclusion (can touch)
+        if t_start < self._t_exclude_start:
+            t_start = self._t_exclude_start
+        # Ensure it's also <= end exclusion
+        if t_start > self._t_exclude_end:
+            t_start = self._t_exclude_end
         idx_start = np.argmin(np.abs(decay_result.t - t_start))
         self._start_x = t_start
         self._start_y = decay_result.l_ir[idx_start]
         
         t_end = decay_result.t_end_fit
+        # Ensure end marker is <= end exclusion (can touch)
+        if t_end > self._t_exclude_end:
+            t_end = self._t_exclude_end
+        # Ensure it's also >= start exclusion
+        if t_end < self._t_exclude_start:
+            t_end = self._t_exclude_start + 0.01
         idx_end = np.argmin(np.abs(decay_result.t - t_end))
         self._end_x = t_end
         self._end_y = decay_result.l_ir[idx_end]
@@ -260,23 +331,42 @@ class RT60CorrectionDialog(QDialog):
         self.plot.setLabel('bottom', 'Time', units='s')
         self.plot.getPlotItem().setMenuEnabled(False)
         
-        # Excluded region (shading)
-        self.exclude_region = pg.LinearRegionItem(
-            values=[0, self._t_exclude],
+        # Excluded regions (shading) - start and end
+        self.exclude_region_start = pg.LinearRegionItem(
+            values=[0, self._t_exclude_start],
             orientation='vertical',
             movable=False,
             brush=pg.mkBrush(243, 139, 168, 40),
             pen=pg.mkPen(None)
         )
-        self.plot.addItem(self.exclude_region)
+        self.plot.addItem(self.exclude_region_start)
         
-        # Exclusion boundary (vertical line, not draggable)
-        self.exclude_line = pg.InfiniteLine(
-            pos=self._t_exclude, angle=90, movable=False,
-            pen=pg.mkPen('#f38ba8', width=2, style=Qt.DotLine),
-            label="Exclusion", labelOpts={'position': 0.98, 'color': '#f38ba8'}
+        self.exclude_region_end = pg.LinearRegionItem(
+            values=[self._t_exclude_end, self._decay.t[-1]],
+            orientation='vertical',
+            movable=False,
+            brush=pg.mkBrush(243, 139, 168, 40),
+            pen=pg.mkPen(None)
         )
-        self.plot.addItem(self.exclude_line)
+        self.plot.addItem(self.exclude_region_end)
+        
+        # Start exclusion boundary (vertical line, draggable)
+        self.exclude_start_line = pg.InfiniteLine(
+            pos=self._t_exclude_start, angle=90, movable=True,
+            pen=pg.mkPen('#f38ba8', width=2, style=Qt.DotLine),
+            label="Start Exclusion", labelOpts={'position': 0.98, 'color': '#f38ba8'}
+        )
+        self.exclude_start_line.sigPositionChanged.connect(self._on_exclude_start_changed)
+        self.plot.addItem(self.exclude_start_line)
+        
+        # End exclusion boundary (vertical line, draggable)
+        self.exclude_end_line = pg.InfiniteLine(
+            pos=self._t_exclude_end, angle=90, movable=True,
+            pen=pg.mkPen('#f38ba8', width=2, style=Qt.DotLine),
+            label="End Exclusion", labelOpts={'position': 0.97, 'color': '#f38ba8'}
+        )
+        self.exclude_end_line.sigPositionChanged.connect(self._on_exclude_end_changed)
+        self.plot.addItem(self.exclude_end_line)
         
         # Level progression (background)
         self.decay_curve = self.plot.plot(
@@ -299,20 +389,20 @@ class RT60CorrectionDialog(QDialog):
         self.noise_line.sigPositionChanged.connect(self._on_noise_changed)
         self.plot.addItem(self.noise_line)
         
-        # Start line (vertical, draggable)
+        # Start line (vertical, draggable) - gray
         self.start_line = pg.InfiniteLine(
             pos=self._start_x, angle=90, movable=True,
-            pen=pg.mkPen('#a6e3a1', width=2),
-            label="Start", labelOpts={'position': 0.9, 'color': '#a6e3a1'}
+            pen=pg.mkPen('#6c7086', width=2),
+            label="Start", labelOpts={'position': 0.9, 'color': '#6c7086'}
         )
         self.start_line.sigPositionChanged.connect(self._on_start_line_changed)
         self.plot.addItem(self.start_line)
         
-        # End line (vertical, draggable)
+        # End line (vertical, draggable) - gray
         self.end_line = pg.InfiniteLine(
             pos=self._end_x, angle=90, movable=True,
-            pen=pg.mkPen('#f38ba8', width=2),
-            label="End", labelOpts={'position': 0.8, 'color': '#f38ba8'}
+            pen=pg.mkPen('#6c7086', width=2),
+            label="End", labelOpts={'position': 0.8, 'color': '#6c7086'}
         )
         self.end_line.sigPositionChanged.connect(self._on_end_line_changed)
         self.plot.addItem(self.end_line)
@@ -392,18 +482,52 @@ class RT60CorrectionDialog(QDialog):
         
         layout.addLayout(btn_layout)
     
+    def _on_exclude_start_changed(self):
+        """Start exclusion line was moved."""
+        new_pos = self.exclude_start_line.value()
+        # Constrain: must be >= 0, <= end of RIR, and at least 100ms before end exclusion
+        new_pos = max(0.0, min(new_pos, self._decay.t[-1], self._t_exclude_end - 0.1))
+        self._t_exclude_start = new_pos
+        self.exclude_start_line.setValue(new_pos)
+        # Update exclusion region
+        self.exclude_region_start.setRegion([0, new_pos])
+        # Constrain regression markers to be within non-excluded area (can touch exclusion)
+        if self._start_x < new_pos:
+            self._start_x = new_pos
+            self.start_line.setValue(self._start_x)
+        self._update_display()
+    
+    def _on_exclude_end_changed(self):
+        """End exclusion line was moved."""
+        new_pos = self.exclude_end_line.value()
+        # Constrain: must be >= 0, <= end of RIR, and at least 100ms after start exclusion
+        new_pos = max(0.0, self._t_exclude_start + 0.1, min(new_pos, self._decay.t[-1]))
+        self._t_exclude_end = new_pos
+        self.exclude_end_line.setValue(new_pos)
+        # Update exclusion region
+        self.exclude_region_end.setRegion([new_pos, self._decay.t[-1]])
+        # Constrain regression markers to be within non-excluded area (can touch exclusion)
+        if self._end_x > new_pos:
+            self._end_x = new_pos
+            self.end_line.setValue(self._end_x)
+        self._update_display()
+    
     def _on_start_line_changed(self):
         """Start line was moved."""
         new_pos = self.start_line.value()
-        new_pos = max(self._t_exclude + 0.01, min(new_pos, self._end_x - 0.01))
+        # Constrain: must be >= start exclusion (can touch), < end regression marker, and <= end exclusion (can touch)
+        new_pos = max(self._t_exclude_start, min(new_pos, self._end_x - 0.01, self._t_exclude_end))
         self._start_x = new_pos
+        self.start_line.setValue(new_pos)
         self._update_display()
     
     def _on_end_line_changed(self):
         """End line was moved."""
         new_pos = self.end_line.value()
-        new_pos = max(self._start_x + 0.01, min(new_pos, self._decay.t[-1] * 0.95))
+        # Constrain: must be > start regression marker and <= end exclusion (can touch)
+        new_pos = max(self._start_x + 0.01, min(new_pos, self._t_exclude_end))
         self._end_x = new_pos
+        self.end_line.setValue(new_pos)
         self._update_display()
     
     def _on_noise_changed(self):
@@ -417,28 +541,80 @@ class RT60CorrectionDialog(QDialog):
         t = self._decay.t
         l_ir = self._decay.l_ir
         
-        # Regression in selected region
-        mask = (t >= self._start_x) & (t <= self._end_x)
+        # Get exact positions from line widgets to ensure sync
+        self._start_x = self.start_line.value()
+        self._end_x = self.end_line.value()
+        self._t_exclude_start = self.exclude_start_line.value()
+        self._t_exclude_end = self.exclude_end_line.value()
+        
+        # Ensure regression markers are within valid bounds (can touch exclusions)
+        self._start_x = max(self._t_exclude_start, min(self._start_x, self._t_exclude_end, self._end_x - 0.01))
+        self._end_x = max(self._start_x + 0.01, min(self._end_x, self._t_exclude_end))
+        
+        # Update line widgets if values were constrained
+        if abs(self.start_line.value() - self._start_x) > 1e-6:
+            self.start_line.setValue(self._start_x)
+        if abs(self.end_line.value() - self._end_x) > 1e-6:
+            self.end_line.setValue(self._end_x)
+        
+        # Update exclusion regions
+        self.exclude_region_start.setRegion([0, self._t_exclude_start])
+        self.exclude_region_end.setRegion([self._t_exclude_end, t[-1]])
+        
+        # Regression in selected region (must be within non-excluded area, can touch boundaries)
+        mask = (t >= self._start_x) & (t <= self._end_x) & (t >= self._t_exclude_start) & (t <= self._t_exclude_end)
         if not np.any(mask):
             return
         
+        # Calculate regression slope in the selected region
         p = np.polyfit(t[mask], l_ir[mask], 1)
         slope = p[0]
         
-        # Start/End-Y for display
-        self._start_y = np.polyval(p, self._start_x)
-        self._end_y = np.polyval(p, self._end_x)
+        # Calculate regression value at start marker
+        regression_start_y = np.polyval(p, self._start_x)
         
-        # Draw line: From start marker (_start_x) to end (_end_x)
-        t_plot = np.linspace(self._start_x, self._end_x, 100)
-        l_plot = np.polyval(p, t_plot)
-        self.trend_line.setData(t_plot, l_plot)
+        # Force regression to pass exactly through start marker position
+        # This ensures the line always aligns with the start marker visually
+        intercept = regression_start_y - slope * self._start_x
+        p_forced = np.array([slope, intercept])  # [slope, intercept] for polyval
+        
+        # Store regression parameters for use in analysis
+        self._regression_slope = slope
+        self._regression_intercept = intercept
+        
+        # Start/End-Y for display (using forced regression)
+        self._start_y = np.polyval(p_forced, self._start_x)  # Should equal regression_start_y
+        self._end_y = np.polyval(p_forced, self._end_x)
         
         # Intersection with noise floor
         if abs(slope) > 1e-6:
-            self._t_intersect = (self._noise_level - p[1]) / slope
+            self._t_intersect = (self._noise_level - intercept) / slope
         else:
             self._t_intersect = t[-1]
+        
+        # Determine endpoint: use end marker if it's before intersection, otherwise use intersection
+        t_start = self._start_x
+        t_end = min(self._end_x, self._t_intersect) if self._end_x < self._t_intersect else self._t_intersect
+        
+        # Make sure endpoint is valid
+        if t_end < t_start:
+            t_end = t_start + 0.01  # Fallback if endpoint is before start
+        
+        # Use enough points for smooth rendering
+        num_points = max(100, int((t_end - t_start) * 1000))  # At least 1 point per ms
+        t_plot = np.linspace(t_start, t_end, num_points)
+        # Explicitly set endpoints to exact positions to ensure visual connection
+        t_plot[0] = t_start
+        t_plot[-1] = t_end
+        l_plot = np.polyval(p_forced, t_plot)
+        # Ensure the start point matches exactly at start marker
+        l_plot[0] = self._start_y
+        # Ensure the end point matches the regression at endpoint
+        if t_end == self._t_intersect:
+            l_plot[-1] = self._noise_level  # At intersection with noise floor
+        else:
+            l_plot[-1] = np.polyval(p_forced, t_end)  # At end marker
+        self.trend_line.setData(t_plot, l_plot)
         
         # Calculate RT60
         if abs(p[0]) > 1e-3:
@@ -475,14 +651,17 @@ class RT60CorrectionDialog(QDialog):
             'end_y': self._end_y,
             'noise_level': self._noise_level,
             't_intersect': self._t_intersect,
-            't_exclude': self._t_exclude,
+            't_exclude_start': self._t_exclude_start,
+            't_exclude_end': self._t_exclude_end,
             'rt60': self._rt60,
+            'regression_slope': self._regression_slope,
+            'regression_intercept': self._regression_intercept,
         }
     
     def get_corrected_times(self) -> tuple:
         """Returns the corrected start and end times (for analysis)."""
-        # Start = exclusion boundary (t_exclude), End = intersection point
-        return (self._t_exclude, self._t_intersect)
+        # Start = start exclusion boundary, End = intersection point
+        return (self._t_exclude_start, self._t_intersect)
     
     def was_accepted(self) -> bool:
         """True if the user clicked 'Apply'."""
@@ -729,17 +908,17 @@ class FlutterEchoWidget(QWidget):
         data_column = QVBoxLayout()
         data_column.setSpacing(10)
         
-        # Results table (now 4 rows, RT60 removed)
-        self.results_table = QTableWidget(4, 2)
+        # Results table (3 rows: Distance, Repetition Freq., Amplitude)
+        self.results_table = QTableWidget(3, 2)
         self.results_table.verticalHeader().setVisible(False)
         self.results_table.horizontalHeader().setVisible(False)
         self.results_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.results_table.setStyleSheet("background-color: #1e1e2e; color: #cdd6f4; gridline-color: #313244; border: 1px solid #313244;")
         self.results_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.results_table.setFocusPolicy(Qt.NoFocus)
-        self.results_table.setFixedHeight(145) # Higher so no scrolling needed
+        self.results_table.setFixedHeight(110) # Adjusted height for 3 rows
         
-        headers = ["Distance", "Repetition Freq.", "Amplitude", "Audibility"]
+        headers = ["Distance", "Repetition Freq.", "Amplitude"]
         for i, h in enumerate(headers):
             self.results_table.setItem(i, 0, QTableWidgetItem(h))
             self.results_table.setItem(i, 1, QTableWidgetItem("–"))
@@ -903,14 +1082,21 @@ class FlutterEchoWidget(QWidget):
         # Step 3: Apply corrected values and perform analysis
         values = dialog.get_corrected_values()
         
+        # Use the regression parameters calculated in the dialog
         config_corrected = FlutterDetectionConfig(
             sample_rate=self._sample_rate,
-            t_start_fit_override=values['t_exclude'],
+            t_start_fit_override=values['t_exclude_start'],
             t_end_fit_override=values['t_intersect'],
             noise_level_override=values['noise_level'],
+            # Use the regression parameters from the dialog (user-selected markers)
+            manual_slope=values['regression_slope'],
+            manual_intercept=values['regression_intercept'],
         )
         
         self._result = analyze_flutter(self._audio_data, config_corrected)
+        # Store regression marker positions for RT60 plot
+        self._result.t_regression_start = values['start_x']
+        self._result.t_regression_end = values['end_x']
         self._selected_peak_index = 0
         self._update_display()
 
@@ -944,7 +1130,6 @@ class FlutterEchoWidget(QWidget):
         self.results_table.item(0, 1).setText(f"{peak.distance_m:.2f} m")
         self.results_table.item(1, 1).setText(f"{peak.repetition_frequency_hz:.1f} Hz")
         self.results_table.item(2, 1).setText(f"{peak.amplitude:.0f}")
-        self.results_table.item(3, 1).setText(self._result.severity if peak.is_main else self._estimate_peak_severity(peak.amplitude))
         
         # Update RT60 display
         if self._result.rt60_s > 0:
@@ -1009,11 +1194,6 @@ class FlutterEchoWidget(QWidget):
             matches.append(f"H ({h:.2f}m)"); active_dims.append("H")
         
         self.room_schematic.set_active_dimensions(active_dims)
-        
-    def _estimate_peak_severity(self, amp):
-        if amp > 800: return "strong"
-        if amp > 400: return "medium"
-        return "weak"
 
     def clear(self):
         self._result = None
@@ -1027,4 +1207,4 @@ class FlutterEchoWidget(QWidget):
         self.length_input.clear(); self.width_input.clear(); self.height_input.clear()
         self.rt60_label.setText("RT60: –")
         self.rt60_plot_btn.setEnabled(False)
-        for i in range(4): self.results_table.item(i, 1).setText("–")
+        for i in range(3): self.results_table.item(i, 1).setText("–")
