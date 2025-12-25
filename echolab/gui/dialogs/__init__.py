@@ -1,5 +1,5 @@
 """
-Dialogs for Audio Analyzer.
+Dialogs for Echolab.
 """
 
 from .audio_info_dialog import AudioInfoDialog

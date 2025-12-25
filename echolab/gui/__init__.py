@@ -1,5 +1,5 @@
 """
-GUI module for Audio Analyzer.
+GUI module for Echolab.
 
 Uses PySide6 and pyqtgraph for interactive visualization.
 Strict separation from DSP logic - this module only contains presentation.

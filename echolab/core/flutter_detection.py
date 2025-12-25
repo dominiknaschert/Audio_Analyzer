@@ -78,6 +78,8 @@ class FlutterEchoResult:
     p_decay: Optional[np.ndarray] = None
     t_start_analysis: float = 0.2  # Actually used start for analysis time windowing
     t_end_analysis: float = 0.0    # Actually used end for analysis time windowing
+    t_regression_start: float = 0.2  # Start marker of regression (user-selected)
+    t_regression_end: float = 0.0    # End marker of regression (user-selected)
     
     # Backward compatibility
     peak_distances: List[float] = None

@@ -1,5 +1,5 @@
 """
-Utility module for Audio Analyzer.
+Utility module for Echolab.
 
 Contains helper functions used by both Core and GUI.
 """

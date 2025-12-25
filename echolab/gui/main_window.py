@@ -1,5 +1,5 @@
 """
-Main window of the Audio Analyzer application - Simplified version
+Main window of the Echolab application - Simplified version
 
 Structure:
 - Tab 1: Time domain (large) + Spectrogram
@@ -148,7 +148,7 @@ class MainWindow(QMainWindow):
 
     def _init_ui(self):
         """Build UI."""
-        self.setWindowTitle("Audio Analyzer")
+        self.setWindowTitle("Echolab")
         self.setMinimumSize(1000, 700)
         
         # Shortcuts for tab navigation (Global)
@@ -282,7 +282,7 @@ class MainWindow(QMainWindow):
         info_layout.addStretch()
         
         tab1_layout.addWidget(info_bar)
-        self.tabs.addTab(tab1, "Time Domain & Spectrogram")
+        self.tabs.addTab(tab1, "Time Domain")
         
         # === Tab 2: FFT Analysis ===
         tab2 = QWidget()
@@ -332,7 +332,7 @@ class MainWindow(QMainWindow):
         self.fft_plot.getPlotItem().setMenuEnabled(False)
         self.fft_plot.setXRange(np.log10(20), np.log10(20000), padding=0)
         self.fft_plot.setYRange(-100, 0)
-        self.fft_curve = self.fft_plot.plot(pen=pg.mkPen('#a6e3a1', width=1.5))
+        self.fft_curve = self.fft_plot.plot(pen=pg.mkPen('#89b4fa', width=1.5))
         
         fft_plot_layout.addWidget(self.fft_plot)
         tab2_layout.addWidget(fft_plot_container, stretch=1)
@@ -579,6 +579,10 @@ class MainWindow(QMainWindow):
             # Calculate spectrogram
             self._update_spectrogram()
             
+            # Update FFT if FFT tab is active
+            if self.tabs.currentIndex() == 1:  # FFT Tab
+                self._update_fft()
+            
             # Update UI
             self.file_label.setText(
                 f"{self._audio.file_path.name} | "
@@ -751,7 +755,20 @@ class MainWindow(QMainWindow):
         self.fft_curve.setData(freqs[1:], magnitude_db[1:])  # Without DC
         f_max = min(self._audio.sample_rate / 2, 20000)
         self.fft_plot.setXRange(np.log10(20), np.log10(f_max), padding=0)
-        self.fft_plot.setYRange(-100, 0)
+        
+        # Auto-scale Y-axis based on actual data
+        valid_magnitude = magnitude_db[1:]  # Exclude DC
+        if len(valid_magnitude) > 0:
+            y_min = np.min(valid_magnitude)
+            y_max = np.max(valid_magnitude)
+            # Add padding: 10% above max, and ensure minimum is at least 20 dB below max
+            y_padding = max((y_max - y_min) * 0.1, 5.0)
+            y_max_scaled = y_max + y_padding
+            y_min_scaled = min(y_min - y_padding, y_max - 80)  # At least 80 dB range, but not above max
+            self.fft_plot.setYRange(y_min_scaled, y_max_scaled)
+        else:
+            # Fallback to default range
+            self.fft_plot.setYRange(-100, 0)
         
         # Info
         self.fft_info.setText(

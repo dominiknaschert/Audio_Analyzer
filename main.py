@@ -1,22 +1,9 @@
-#!/usr/bin/env python3
-"""
-Audio Analyzer - Einstiegspunkt
-
-Offline-Analyse von Audiodateien mit Fokus auf zeitabhängige Terzband-Impulsantworten.
-
-Verwendung:
-    python main.py [audio_file]
-
-Beispiel:
-    python main.py recording.wav
-"""
-
 import sys
 from pathlib import Path
 
 
 def main():
-    """Start the Audio Analyzer application."""
+    """Start the Echolab application."""
     # Check Python version
     if sys.version_info < (3, 11):
         print("Error: Python 3.11 or higher is required.")
@@ -33,7 +20,7 @@ def main():
         sys.exit(1)
     
     # Import our application
-    from audio_analyzer.gui import MainWindow
+    from echolab.gui import MainWindow
     
     # Enable High DPI scaling
     QApplication.setHighDpiScaleFactorRoundingPolicy(
@@ -42,9 +29,9 @@ def main():
     
     # Create application
     app = QApplication(sys.argv)
-    app.setApplicationName("Audio Analyzer")
+    app.setApplicationName("Echolab")
     app.setApplicationVersion("1.0.0")
-    app.setOrganizationName("AudioAnalyzer")
+    app.setOrganizationName("Echolab")
     
     # Create and show main window
     window = MainWindow()
