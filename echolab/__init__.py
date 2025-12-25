@@ -1,6 +1,5 @@
 """
-Echolab - Audio analysis tool for flutter echo detection
-Focus: Time-dependent third-octave-band impulse responses for improved diagnosis of flutter echoes
+Echolab - Audio tool for flutter echo detection analysis
 """
 
 __version__ = "1.0.0"

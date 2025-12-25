@@ -1,6 +1,8 @@
 /.venv
 /Literatur
 /test_rirs
+/build
+/dist
 
 # Python cache
 __pycache__/
